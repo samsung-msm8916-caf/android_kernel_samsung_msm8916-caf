@@ -62,6 +62,7 @@ static ssize_t sdcardfs_write(struct file *file, const char __user *buf,
 	int err = 0;
 	struct file *lower_file;
 	struct dentry *dentry = file->f_path.dentry;
+	struct inode *inode = dentry->d_inode;
 
 	/* check disk space */
 	if (!check_min_free_space(dentry, count, 0)) {
@@ -73,10 +74,12 @@ static ssize_t sdcardfs_write(struct file *file, const char __user *buf,
 	err = vfs_write(lower_file, buf, count, ppos);
 	/* update our inode times+sizes upon a successful lower write */
 	if (err >= 0) {
-		fsstack_copy_inode_size(dentry->d_inode,
-					lower_file->f_path.dentry->d_inode);
-		fsstack_copy_attr_times(dentry->d_inode,
-					lower_file->f_path.dentry->d_inode);
+		if (sizeof(loff_t) > sizeof(long))
+			mutex_lock(&inode->i_mutex);
+		fsstack_copy_inode_size(inode, lower_file->f_path.dentry->d_inode);
+		fsstack_copy_attr_times(inode, lower_file->f_path.dentry->d_inode);
+		if (sizeof(loff_t) > sizeof(long))
+			mutex_unlock(&inode->i_mutex);
 	}
 
 	return err;
@@ -104,15 +107,27 @@ static long sdcardfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 {
 	long err = -ENOTTY;
 	struct file *lower_file;
+	const struct cred *saved_cred = NULL;
+	struct dentry *dentry = file->f_path.dentry;
+	struct sdcardfs_sb_info *sbi = SDCARDFS_SB(dentry->d_sb);
 
 	lower_file = sdcardfs_lower_file(file);
 
 	/* XXX: use vfs_ioctl if/when VFS exports it */
 	if (!lower_file || !lower_file->f_op)
 		goto out;
+
+	/* save current_cred and override it */
+	OVERRIDE_CRED(sbi, saved_cred, SDCARDFS_I(file_inode(file)));
+
 	if (lower_file->f_op->unlocked_ioctl)
 		err = lower_file->f_op->unlocked_ioctl(lower_file, cmd, arg);
 
+	/* some ioctls can change inode attributes (EXT2_IOC_SETFLAGS) */
+	if (!err)
+		sdcardfs_copy_and_fix_attrs(file_inode(file),
+				      file_inode(lower_file));
+	REVERT_CRED(saved_cred);
 out:
 	return err;
 }
@@ -123,15 +138,23 @@ static long sdcardfs_compat_ioctl(struct file *file, unsigned int cmd,
 {
 	long err = -ENOTTY;
 	struct file *lower_file;
+	const struct cred *saved_cred = NULL;
+	struct dentry *dentry = file->f_path.dentry;
+	struct sdcardfs_sb_info *sbi = SDCARDFS_SB(dentry->d_sb);
 
 	lower_file = sdcardfs_lower_file(file);
 
 	/* XXX: use vfs_ioctl if/when VFS exports it */
 	if (!lower_file || !lower_file->f_op)
 		goto out;
+
+	/* save current_cred and override it */
+	OVERRIDE_CRED(sbi, saved_cred, SDCARDFS_I(file_inode(file)));
+
 	if (lower_file->f_op->compat_ioctl)
 		err = lower_file->f_op->compat_ioctl(lower_file, cmd, arg);
 
+	REVERT_CRED(saved_cred);
 out:
 	return err;
 }
@@ -176,12 +199,6 @@ static int sdcardfs_mmap(struct file *file, struct vm_area_struct *vma)
 			goto out;
 		}
 		saved_vm_ops = vma->vm_ops; /* save: came from lower ->mmap */
-		err = do_munmap(current->mm, vma->vm_start,
-				vma->vm_end - vma->vm_start);
-		if (err) {
-			pr_err("sdcardfs: do_munmap failed %d\n", err);
-			goto out;
-		}
 	}
 
 	/*
@@ -194,6 +211,9 @@ static int sdcardfs_mmap(struct file *file, struct vm_area_struct *vma)
 	file->f_mapping->a_ops = &sdcardfs_aops; /* set our aops */
 	if (!SDCARDFS_F(file)->lower_vm_ops) /* save for our ->fault */
 		SDCARDFS_F(file)->lower_vm_ops = saved_vm_ops;
+	vma->vm_private_data = file;
+	get_file(lower_file);
+	vma->vm_file = lower_file;
 
 out:
 	return err;
@@ -316,6 +336,29 @@ static int sdcardfs_fasync(int fd, struct file *file, int flag)
 	return err;
 }
 
+/*
+ * Sdcardfs cannot use generic_file_llseek as ->llseek, because it would
+ * only set the offset of the upper file.  So we have to implement our
+ * own method to set both the upper and lower file offsets
+ * consistently.
+ */
+static loff_t sdcardfs_file_llseek(struct file *file, loff_t offset, int whence)
+{
+	int err;
+	struct file *lower_file;
+
+	err = generic_file_llseek(file, offset, whence);
+	if (err < 0)
+		goto out;
+
+	lower_file = sdcardfs_lower_file(file);
+	err = generic_file_llseek(lower_file, offset, whence);
+
+out:
+	return err;
+}
+
+
 const struct file_operations sdcardfs_main_fops = {
 	.llseek		= generic_file_llseek,
 	.read		= sdcardfs_read,
@@ -334,7 +377,7 @@ const struct file_operations sdcardfs_main_fops = {
 
 /* trimmed directory options */
 const struct file_operations sdcardfs_dir_fops = {
-	.llseek		= generic_file_llseek,
+	.llseek		= sdcardfs_file_llseek,
 	.read		= generic_read_dir,
 	.iterate	= sdcardfs_readdir,
 	.unlocked_ioctl	= sdcardfs_unlocked_ioctl,

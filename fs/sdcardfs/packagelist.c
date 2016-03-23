@@ -175,19 +175,6 @@ int check_caller_access_to_name(struct inode *parent_node, const struct qstr *na
 	return 1;
 }
 
-/* This function is used when file opening. The open flags must be
- * checked before calling check_caller_access_to_name()
- */
-int open_flags_to_access_mode(int open_flags)
-{
-	if ((open_flags & O_ACCMODE) == O_RDONLY)
-		return 0; /* R_OK */
-	if ((open_flags & O_ACCMODE) == O_WRONLY)
-		return 1; /* W_OK */
-	/* Probably O_RDRW, but treat as default to be safe */
-		return 1; /* R_OK | W_OK */
-}
-
 static struct hashtable_entry *alloc_hashtable_entry(const struct qstr *key,
 		appid_t value)
 {
@@ -488,7 +475,7 @@ static inline struct package_details *to_package_details(struct config_item *ite
 CONFIGFS_ATTR_STRUCT(package_details);
 #define PACKAGE_DETAILS_ATTR(_name, _mode, _show, _store)	\
 struct package_details_attribute package_details_attr_##_name = __CONFIGFS_ATTR(_name, _mode, _show, _store)
-#define PACKAGE_DETAILS_ATTRIBUTE(name) &package_details_attr_##name.attr
+#define PACKAGE_DETAILS_ATTRIBUTE(name) (&package_details_attr_##name.attr)
 
 static ssize_t package_details_appid_show(struct package_details *package_details,
 				      char *page)
@@ -658,6 +645,7 @@ static struct config_item *extension_details_make_item(struct config_group *grou
 		return ERR_PTR(-ENOMEM);
 	}
 	qstr_init(&extension_details->name, tmp);
+	extension_details->num = extensions_value->num;
 	ret = insert_ext_gid_entry(&extension_details->name, extensions_value->num);
 
 	if (ret) {
@@ -738,7 +726,7 @@ CONFIGFS_ATTR_STRUCT(packages);
 #define PACKAGES_ATTR(_name, _mode, _show, _store)	\
 struct packages_attribute packages_attr_##_name = __CONFIGFS_ATTR(_name, _mode, _show, _store)
 #define PACKAGES_ATTR_RO(_name, _show)	\
-struct packages_attribute packages_attr_##_name = __CONFIGFS_ATTR_RO(_name, _show);
+struct packages_attribute packages_attr_##_name = __CONFIGFS_ATTR_RO(_name, _show)
 
 static struct config_item *packages_make_item(struct config_group *group, const char *name)
 {
