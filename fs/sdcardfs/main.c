@@ -28,7 +28,6 @@ enum {
 	Opt_fsgid,
 	Opt_gid,
 	Opt_debug,
-	Opt_lower_fs,
 	Opt_mask,
 	Opt_multiuser, // May need?
 	Opt_userid,
@@ -41,7 +40,6 @@ static const match_table_t sdcardfs_tokens = {
 	{Opt_fsgid, "fsgid=%u"},
 	{Opt_gid, "gid=%u"},
 	{Opt_debug, "debug"},
-	{Opt_lower_fs, "lower_fs=%s"},
 	{Opt_mask, "mask=%u"},
 	{Opt_userid, "userid=%d"},
 	{Opt_multiuser, "multiuser"},
@@ -56,19 +54,14 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 	char *p;
 	substring_t args[MAX_OPT_ARGS];
 	int option;
-	char *string_option;
 
 	/* by default, we use AID_MEDIA_RW as uid, gid */
 	opts->fs_low_uid = AID_MEDIA_RW;
 	opts->fs_low_gid = AID_MEDIA_RW;
 	vfsopts->mask = 0;
-	opts->mask = 0;
 	opts->multiuser = false;
 	opts->fs_user_id = 0;
 	vfsopts->gid = 0;
-	opts->gid = 0;
-	/* by default, we use LOWER_FS_EXT4 as lower fs type */
-	opts->lower_fs = LOWER_FS_EXT4;
 	/* by default, 0MB is reserved */
 	opts->reserved_mb = 0;
 
@@ -79,6 +72,7 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 
 	while ((p = strsep(&options, ",")) != NULL) {
 		int token;
+
 		if (!*p)
 			continue;
 
@@ -101,7 +95,6 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 		case Opt_gid:
 			if (match_int(&args[0], &option))
 				return 0;
-			opts->gid = option;
 			vfsopts->gid = option;
 			break;
 		case Opt_userid:
@@ -112,23 +105,10 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 		case Opt_mask:
 			if (match_int(&args[0], &option))
 				return 0;
-			opts->mask = option;
 			vfsopts->mask = option;
 			break;
 		case Opt_multiuser:
 			opts->multiuser = true;
-			break;
-		case Opt_lower_fs:
-			string_option = match_strdup(&args[0]);
-			if (!strcmp("ext4", string_option)) {
-				opts->lower_fs = LOWER_FS_EXT4;
-			} else if (!strcmp("fat", string_option)) {
-				opts->lower_fs = LOWER_FS_FAT;
-			} else {
-				kfree(string_option);
-				goto invalid_option;
-			}
-			kfree(string_option);
 			break;
 		case Opt_reserved_mb:
 			if (match_int(&args[0], &option))
@@ -137,7 +117,6 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 			break;
 		/* unknown option */
 		default:
-invalid_option:
 			if (!silent) {
 				printk( KERN_ERR "Unrecognized mount option \"%s\" "
 						"or missing value", p);
@@ -170,6 +149,7 @@ int parse_options_remount(struct super_block *sb, char *options, int silent,
 
 	while ((p = strsep(&options, ",")) != NULL) {
 		int token;
+
 		if (!*p)
 			continue;
 
@@ -245,8 +225,8 @@ static struct dentry *sdcardfs_d_alloc_root(struct super_block *sb)
 #endif
 
 DEFINE_MUTEX(sdcardfs_super_list_lock);
-LIST_HEAD(sdcardfs_super_list);
 EXPORT_SYMBOL_GPL(sdcardfs_super_list_lock);
+LIST_HEAD(sdcardfs_super_list);
 EXPORT_SYMBOL_GPL(sdcardfs_super_list);
 
 /*
@@ -275,6 +255,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 
 	printk(KERN_INFO "sdcardfs: dev_name -> %s\n", dev_name);
 	printk(KERN_INFO "sdcardfs: options -> %s\n", (char *)raw_data);
+	printk(KERN_INFO "sdcardfs: mnt -> %p\n", mnt);
 
 	/* parse lower path */
 	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,
@@ -349,17 +330,18 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	/* setup permission policy */
 	sb_info->obbpath_s = kzalloc(PATH_MAX, GFP_KERNEL);
 	mutex_lock(&sdcardfs_super_list_lock);
-	if(sb_info->options.multiuser) {
-		setup_derived_state(sb->s_root->d_inode, PERM_PRE_ROOT, sb_info->options.fs_user_id, AID_ROOT, false, sb->s_root->d_inode);
+	if (sb_info->options.multiuser) {
+		setup_derived_state(sb->s_root->d_inode, PERM_PRE_ROOT,
+					sb_info->options.fs_user_id, AID_ROOT,
+					false, sb->s_root->d_inode);
 		snprintf(sb_info->obbpath_s, PATH_MAX, "%s/obb", dev_name);
-		/*err =  prepare_dir(sb_info->obbpath_s,
-					sb_info->options.fs_low_uid,
-					sb_info->options.fs_low_gid, 00755);*/
 	} else {
-		setup_derived_state(sb->s_root->d_inode, PERM_ROOT, sb_info->options.fs_low_uid, AID_ROOT, false, sb->s_root->d_inode);
+		setup_derived_state(sb->s_root->d_inode, PERM_ROOT,
+					sb_info->options.fs_user_id, AID_ROOT,
+					false, sb->s_root->d_inode);
 		snprintf(sb_info->obbpath_s, PATH_MAX, "%s/Android/obb", dev_name);
 	}
-	fix_derived_permission(sb->s_root->d_inode);
+	fixup_tmp_permissions(sb->s_root->d_inode);
 	sb_info->sb = sb;
 	list_add(&sb_info->list, &sdcardfs_super_list);
 	mutex_unlock(&sdcardfs_super_list_lock);
@@ -389,8 +371,10 @@ out:
 
 /* A feature which supports mount_nodev() with options */
 static struct dentry *mount_nodev_with_options(struct vfsmount *mnt,
-	struct file_system_type *fs_type, int flags, const char *dev_name, void *data,
-        int (*fill_super)(struct vfsmount *, struct super_block *, const char *, void *, int))
+			struct file_system_type *fs_type, int flags,
+			const char *dev_name, void *data,
+			int (*fill_super)(struct vfsmount *, struct super_block *,
+						const char *, void *, int))
 
 {
 	int error;
@@ -422,19 +406,22 @@ static struct dentry *sdcardfs_mount(struct vfsmount *mnt,
 						raw_data, sdcardfs_read_super);
 }
 
-static struct dentry *sdcardfs_mount_wrn(struct file_system_type *fs_type, int flags,
-		    const char *dev_name, void *raw_data)
+static struct dentry *sdcardfs_mount_wrn(struct file_system_type *fs_type,
+		    int flags, const char *dev_name, void *raw_data)
 {
 	WARN(1, "sdcardfs does not support mount. Use mount2.\n");
 	return ERR_PTR(-EINVAL);
 }
 
-void *sdcardfs_alloc_mnt_data(void) {
+void *sdcardfs_alloc_mnt_data(void)
+{
 	return kmalloc(sizeof(struct sdcardfs_vfsmount_options), GFP_KERNEL);
 }
 
-void sdcardfs_kill_sb(struct super_block *sb) {
+void sdcardfs_kill_sb(struct super_block *sb)
+{
 	struct sdcardfs_sb_info *sbi;
+
 	if (sb->s_magic == SDCARDFS_SUPER_MAGIC) {
 		sbi = SDCARDFS_SB(sb);
 		mutex_lock(&sdcardfs_super_list_lock);
@@ -453,6 +440,7 @@ static struct file_system_type sdcardfs_fs_type = {
 	.kill_sb	= sdcardfs_kill_sb,
 	.fs_flags	= 0,
 };
+MODULE_ALIAS_FS(SDCARDFS_NAME);
 
 static int __init init_sdcardfs_fs(void)
 {
