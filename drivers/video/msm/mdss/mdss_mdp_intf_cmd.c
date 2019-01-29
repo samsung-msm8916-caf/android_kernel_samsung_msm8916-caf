@@ -415,7 +415,9 @@ static void pingpong_done_work(struct work_struct *work)
 		while (atomic_add_unless(&ctx->pp_done_cnt, -1, 0))
 			mdss_mdp_ctl_notify(ctx->ctl, MDP_NOTIFY_FRAME_DONE);
 
+#if !defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 		mdss_mdp_ctl_perf_release_bw(ctx->ctl);
+#endif
 	}
 }
 
@@ -549,6 +551,12 @@ int mdss_mdp_cmd_reconfigure_splash_done(struct mdss_mdp_ctl *ctl, bool handoff)
 	int ret = 0;
 
 	pdata = ctl->panel_data;
+
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	/* Turning off panel & mdp to initialize panel init-seq at kick-off*/
+	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_BLANK, NULL);
+	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_OFF, NULL);
+#endif
 
 	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)0);
 

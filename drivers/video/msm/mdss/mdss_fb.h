@@ -371,4 +371,9 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		     unsigned long arg);
 int mdss_fb_compat_ioctl(struct fb_info *info, unsigned int cmd,
 			 unsigned long arg);
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+extern u8 csc_update;
+extern u8 csc_change;
+void mdss_samsung_update_brightness_value(void);
+#endif
 #endif /* MDSS_FB_H */
