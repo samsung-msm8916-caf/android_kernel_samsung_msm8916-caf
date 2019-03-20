@@ -542,6 +542,7 @@ struct input_keymap_entry {
 #define BTN_MODE		0x13c
 #define BTN_THUMBL		0x13d
 #define BTN_THUMBR		0x13e
+#define BTN_GAME		0x13f	/* Add game button for samsung bluetooth keypad */
 
 #define BTN_DIGI		0x140
 #define BTN_TOOL_PEN		0x140
@@ -737,6 +738,7 @@ struct input_keymap_entry {
 #define BTN_DPAD_LEFT		0x222
 #define BTN_DPAD_RIGHT		0x223
 
+#define KEY_PEN_PDCT		0x230 /* E-PEN PDCT flag*/
 #define KEY_ALS_TOGGLE		0x230	/* Ambient light sensor */
 
 #define KEY_BUTTONCONFIG		0x240	/* AL Button Configuration */
@@ -794,6 +796,25 @@ struct input_keymap_entry {
 
 /* We avoid low common keys in module aliases so they don't get huge. */
 #define KEY_MIN_INTERESTING	KEY_MUTE
+
+
+/* 0x2f1~2ff is key event for specail event. */
+#define KEY_TSP_NONE_KEY1	0x2f1
+#define KEY_TSP_NONE_KEY2	0x2f2
+#define KEY_TSP_NONE_KEY3	0x2f3
+#define KEY_TSP_NONE_KEY4	0x2f4
+#define KEY_TSP_NONE_KEY5	0x2f5
+#define KEY_TSP_NONE_KEY6	0x2f6
+#define KEY_TSP_NONE_KEY7	0x2f7
+#define KEY_TSP_NONE_KEY8	0x2f8
+#define KEY_TSP_NONE_KEY9	0x2f9
+#define KEY_TSP_NONE_KEYa	0x2fa
+#define KEY_TSP_NONE_KEYb	0x2fb
+#define KEY_TSP_NONE_KEYc	0x2fc
+#define KEY_TSP_NONE_KEYd	0x2fd	/* grip sensor for WIFI */
+#define KEY_CP_GRIP			0x2fe	/* grip sensor for CP */
+
+
 #define KEY_MAX			0x2ff
 #define KEY_CNT			(KEY_MAX+1)
 
@@ -862,7 +883,9 @@ struct input_keymap_entry {
 #define ABS_MT_DISTANCE		0x3b	/* Contact hover distance */
 #define ABS_MT_TOOL_X		0x3c	/* Center X tool position */
 #define ABS_MT_TOOL_Y		0x3d	/* Center Y tool position */
-
+#define ABS_MT_PALM		0x3e	/* Palm touch */
+#define ABS_MT_GRIP		0x3f	/* Grip touch */
+#define ABS_MT_SUMSIZE		0x3f	/* touch sumsize */
 
 #define ABS_MAX			0x3f
 #define ABS_CNT			(ABS_MAX+1)
@@ -891,7 +914,9 @@ struct input_keymap_entry {
 #define SW_HPHR_OVERCURRENT	0x0f  /* set = over current on right hph */
 #define SW_UNSUPPORT_INSERT	0x10  /* set = unsupported device inserted */
 #define SW_MICROPHONE2_INSERT   0x11  /* set = inserted */
+#define SW_GLOVE			0x16  /* set = glove mode */
 #define SW_MUTE_DEVICE		0x12  /* set = device disabled */
+#define SW_PEN_INSERT		0x13
 #define SW_MAX			0x20
 #define SW_CNT			(SW_MAX+1)
 
