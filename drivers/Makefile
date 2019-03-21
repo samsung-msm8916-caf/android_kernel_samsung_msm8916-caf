@@ -59,6 +59,8 @@ obj-$(CONFIG_FB_INTEL)          += video/intelfb/
 
 obj-$(CONFIG_PARPORT)		+= parport/
 obj-y				+= base/ block/ misc/ mfd/ nfc/ soc/
+obj-$(CONFIG_VBUS_NOTIFIER)	+= staging/samsung/sec_notifier/
+obj-$(CONFIG_USE_MUIC)		+= muic/
 obj-$(CONFIG_NUBUS)		+= nubus/
 obj-y				+= macintosh/
 obj-$(CONFIG_IDE)		+= ide/
@@ -167,6 +169,7 @@ obj-$(CONFIG_CORESIGHT)		+= coresight/
 obj-$(CONFIG_ESOC)		+= esoc/
 
 obj-$(CONFIG_BIF)		+= bif/
+obj-$(CONFIG_BATTERY_SAMSUNG)   += battery/
 obj-$(CONFIG_SENSORS)		+= sensors/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 obj-y				+= motor/
