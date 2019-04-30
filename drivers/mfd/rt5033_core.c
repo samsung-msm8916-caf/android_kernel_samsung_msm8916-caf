@@ -663,6 +663,7 @@ static int __init rt5033_mfd_i2c_init(void)
 
 	pr_info("%s : RT5033 init\n", __func__);
 	ret = i2c_add_driver(&rt5033_mfd_driver);
+    pr_info("%s : RT5033 init i2c added - ret %d\n", __func__, ret);
 	if (ret != 0)
 		pr_info("%s : Failed to register RT5033 MFD I2C driver\n",
 		__func__);
