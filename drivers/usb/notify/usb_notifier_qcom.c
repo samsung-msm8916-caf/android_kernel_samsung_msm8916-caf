@@ -279,14 +279,14 @@ static int otg_accessory_power(bool enable)
 	return ret;
 }
 
-//extern void set_ncm_ready(bool ready);
+extern void set_ncm_ready(bool ready);
 static int qcom_set_peripheral(bool enable)
 {
 	struct power_supply *psy;
 
 
-	//if(!enable)
-	//	set_ncm_ready(false);
+	if(!enable)
+		set_ncm_ready(false);
 
 	psy = power_supply_get_by_name("msm-usb");
 	pr_info("usb: msm-usb power_supply_set_present(%d)", enable);
