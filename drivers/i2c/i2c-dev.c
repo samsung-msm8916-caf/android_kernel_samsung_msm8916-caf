@@ -136,7 +136,7 @@ static ssize_t i2cdev_read(struct file *file, char __user *buf, size_t count,
 		loff_t *offset)
 {
 	char *tmp;
-	int ret;
+	int ret,i;
 
 	struct i2c_client *client = file->private_data;
 
@@ -153,6 +153,14 @@ static ssize_t i2cdev_read(struct file *file, char __user *buf, size_t count,
 	ret = i2c_master_recv(client, tmp, count);
 	if (ret >= 0)
 		ret = copy_to_user(buf, tmp, count) ? -EFAULT : ret;
+
+    if (ret >= 0 && iminor(file_inode(file))==1)
+    for (i = 0; i<count; i++)
+    {
+        pr_debug("i2c-dev-1: byte %d RX<--0x%02hhx\n",
+		    i, tmp[i]);
+    }
+
 	kfree(tmp);
 	return ret;
 }
@@ -160,7 +168,7 @@ static ssize_t i2cdev_read(struct file *file, char __user *buf, size_t count,
 static ssize_t i2cdev_write(struct file *file, const char __user *buf,
 		size_t count, loff_t *offset)
 {
-	int ret;
+	int ret,i;
 	char *tmp;
 	struct i2c_client *client = file->private_data;
 
@@ -173,6 +181,14 @@ static ssize_t i2cdev_write(struct file *file, const char __user *buf,
 
 	pr_debug("i2c-dev: i2c-%d writing %zu bytes.\n",
 		iminor(file_inode(file)), count);
+
+
+    if (iminor(file_inode(file))==1)
+    for (i = 0; i<count; i++)
+    {
+        pr_debug("i2c-dev-1: byte %d TX-->0x%02hhx\n",
+		    i, tmp[i]);
+    }
 
 	ret = i2c_master_send(client, tmp, count);
 	kfree(tmp);
