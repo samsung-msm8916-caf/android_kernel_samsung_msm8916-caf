@@ -23,6 +23,21 @@
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
 
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+struct mdp_csc_cfg mdp_csc_convert_wideband = {
+	0,
+	{
+		0x0200, 0x0000, 0x02CD,
+		0x0200, 0xFF4F, 0xFE91,
+		0x0200, 0x038B, 0x0000,
+	},
+	{ 0x0, 0xFF80, 0xFF80,},
+	{ 0x0, 0x0, 0x0,},
+	{ 0x0, 0xFF, 0x0, 0xFF, 0x0, 0xFF,},
+	{ 0x0, 0xFF, 0x0, 0xFF, 0x0, 0xFF,},
+};
+#endif
+
 struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
 	[MDSS_MDP_CSC_YUV2RGB_601L] = {
 		0,
@@ -394,6 +409,8 @@ struct mdss_pp_res_type {
 	struct pp_sts_type pp_disp_sts[MDSS_MAX_MIXER_DISP_NUM];
 	/* physical info */
 	struct pp_hist_col_info *dspp_hist;
+	struct mdp_pcc_cfg_data raw_pcc_disp_cfg[MDSS_BLOCK_DISP_NUM];
+	struct mdp_pcc_cfg_data user_pcc_disp_cfg[MDSS_BLOCK_DISP_NUM];
 };
 
 static DEFINE_MUTEX(mdss_pp_mutex);
@@ -610,7 +627,17 @@ int mdss_mdp_csc_setup(u32 block, u32 blk_idx, u32 csc_type)
 	pr_debug("csc type=%d blk=%d idx=%d\n", csc_type,
 		 block, blk_idx);
 
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	if (csc_type == MDSS_MDP_CSC_YUV2RGB_601L && !csc_update) {
+		data = &mdp_csc_convert_wideband;
+		pr_debug("will do mdp_csc_convert (wide band)\n");
+	} else {
 	data = &mdp_csc_convert[csc_type];
+		pr_debug("will do mdp_csc_convert (narrow band)\n");
+	}
+#else
+	data = &mdp_csc_convert[csc_type];
+#endif
 	return mdss_mdp_csc_setup_data(block, blk_idx, data);
 }
 
@@ -928,7 +955,14 @@ static int pp_vig_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 			opmode |= (0 << 19) |	/* DST_DATA=RGB */
 				  (1 << 18) |	/* SRC_DATA=YCBCR */
 				  (1 << 17);	/* CSC_1_EN */
-
+		/*
+		 * TODO: Needs to be part of dirty bit logic: if there
+		 * is a previously configured pipe need to re-configure
+		 * CSC matrix
+		 */
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		if ((pipe->play_cnt == 0))
+#endif
 			mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num,
 					   pp_vig_csc_pipe_val(pipe));
 		}
@@ -2702,6 +2736,101 @@ static void pp_update_pcc_regs(char __iomem *addr,
 	writel_relaxed(cfg_ptr->b.rgb_1, addr + 8);
 }
 
+static u32 pcc_rescale(u32 raw, u32 user)
+{
+	int val = 0;
+
+	if (raw > 32768)
+		raw = 32768;
+	if (user > 32768)
+		user = 32768;
+	val = 32768 - ((32768 - raw) + (32768 - user));
+	return val < 100 ? 100 : val;
+}
+
+static void pcc_combine(struct mdp_pcc_cfg_data *raw,
+		struct mdp_pcc_cfg_data *user,
+		struct mdp_pcc_cfg_data *real)
+{
+	uint32_t r_ops, u_ops, r_en, u_en;
+
+	if (real == NULL) {
+		real = kzalloc(sizeof(struct mdp_pcc_cfg_data), GFP_KERNEL);
+		if (!real) {
+			pr_err("%s: alloc failed!", __func__);
+			return;
+		}
+	}
+
+	r_ops = raw ? raw->ops : MDP_PP_OPS_DISABLE;
+	u_ops = user ? user->ops : MDP_PP_OPS_DISABLE;
+	r_en = raw && !(raw->ops & MDP_PP_OPS_DISABLE);
+	u_en = user && !(user->ops & MDP_PP_OPS_DISABLE);
+
+	// user configuration may change often, but the raw configuration
+	// will correspond to calibration data which should only change if
+	// there is a mode switch. we only care about the base
+	// coefficients from the user config.
+
+	if (!r_en || (raw->r.r == 0 && raw->g.g == 0 && raw->b.b == 0))
+		raw->r.r = raw->g.g = raw->b.b = 32768;
+	if (!u_en || (user->r.r == 0 && user->g.g == 0 && user->b.b ==0))
+		user->r.r = user->g.g = user->b.b = 32768;
+
+	memcpy(real, raw, sizeof(struct mdp_pcc_cfg_data));
+	real->r.r = pcc_rescale(raw->r.r, user->r.r);
+	real->g.g = pcc_rescale(raw->g.g, user->g.g);
+	real->b.b = pcc_rescale(raw->b.b, user->b.b);
+	if (r_en && u_en)
+		real->ops = r_ops | u_ops;
+	else if (r_en)
+		real->ops = r_ops;
+	else if (u_en)
+		real->ops = u_ops;
+	else
+		real->ops = MDP_PP_OPS_DISABLE;
+
+	pr_debug("%s: raw:\n", __func__);
+	pp_print_pcc_cfg_data(raw, 0);
+	pr_debug("%s: user:\n", __func__);
+	pp_print_pcc_cfg_data(user, 0);
+	pr_debug("%s: real:\n", __func__);
+	pp_print_pcc_cfg_data(real, 0);
+}
+
+int mdss_mdp_user_pcc_config(struct mdp_pcc_cfg_data *config)
+{
+	int ret = 0;
+	u32 disp_num = 0;
+
+	if ((config->block < MDP_LOGICAL_BLOCK_DISP_0) ||
+		(config->block >= MDP_BLOCK_MAX))
+		return -EINVAL;
+
+	if ((config->ops & MDSS_PP_SPLIT_MASK) == MDSS_PP_SPLIT_MASK) {
+		pr_warn("Can't set both split bits\n");
+		return -EINVAL;
+	}
+
+	if (config->ops & MDP_PP_OPS_READ) {
+		pr_warn("Only write is supported for user PCC\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&mdss_pp_mutex);
+	disp_num = config->block - MDP_LOGICAL_BLOCK_DISP_0;
+
+	mdss_pp_res->user_pcc_disp_cfg[disp_num] = *config;
+	pcc_combine(&mdss_pp_res->raw_pcc_disp_cfg[disp_num],
+				&mdss_pp_res->user_pcc_disp_cfg[disp_num],
+				&mdss_pp_res->pcc_disp_cfg[disp_num]);
+	mdss_pp_res->pp_disp_flags[disp_num] |= PP_FLAGS_DIRTY_PCC;
+
+	mutex_unlock(&mdss_pp_mutex);
+	return ret;
+}
+
+
 int mdss_mdp_pcc_config(struct mdp_pcc_cfg_data *config,
 					u32 *copyback)
 {
@@ -2737,7 +2866,10 @@ int mdss_mdp_pcc_config(struct mdp_pcc_cfg_data *config,
 		*copyback = 1;
 		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 	} else {
-		mdss_pp_res->pcc_disp_cfg[disp_num] = *config;
+		mdss_pp_res->raw_pcc_disp_cfg[disp_num] = *config;
+		pcc_combine(&mdss_pp_res->raw_pcc_disp_cfg[disp_num],
+					&mdss_pp_res->user_pcc_disp_cfg[disp_num],
+					&mdss_pp_res->pcc_disp_cfg[disp_num]);
 		mdss_pp_res->pp_disp_flags[disp_num] |= PP_FLAGS_DIRTY_PCC;
 	}
 
@@ -3433,6 +3565,11 @@ int mdss_mdp_gamut_config(struct mdp_gamut_cfg_data *config,
 		*copyback = 1;
 		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 	} else {
+		if (pp_gm_has_invalid_lut_size(config)) {
+			pr_err("invalid lut size for gamut\n");
+			ret = -EINVAL;
+			goto gamut_config_exit;
+		}
 		local_cfg = *config;
 		tbl_off = mdss_pp_res->gamut_tbl[disp_num];
 		for (i = 0; i < MDP_GAMUT_TABLE_NUM; i++) {

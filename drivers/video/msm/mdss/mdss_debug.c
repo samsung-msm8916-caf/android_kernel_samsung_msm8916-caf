@@ -1152,6 +1152,29 @@ void mdss_dump_reg(char __iomem *base, int len)
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 }
 
+void mdss_dump_reg2(char __iomem *base, int len)
+{
+	char *addr;
+	u32 x0, x4, x8, xc;
+	int i;
+
+	addr = base;
+	if (len % 16)
+		len += 16;
+	len /= 16;
+
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
+	for (i = 0; i < len; i++) {
+		x0 = readl_relaxed(addr+0x0);
+		x4 = readl_relaxed(addr+0x4);
+		x8 = readl_relaxed(addr+0x8);
+		xc = readl_relaxed(addr+0xc);
+		pr_info("%pK : %08x %08x %08x %08x\n", addr, x0, x4, x8, xc);
+		addr += 16;
+	}
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
+}
+
 int vsync_count;
 static struct mdss_mdp_misr_map {
 	u32 ctrl_reg;
