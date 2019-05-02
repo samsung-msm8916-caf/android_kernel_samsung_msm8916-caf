@@ -37,12 +37,6 @@ char elvss_buffer[1];
 struct mdss_dsi_ctrl_pdata *avc_ctrl;
 struct delayed_work avc_work;
 
-static void delayed_avc_func(struct work_struct *work) {
-
-	mdss_samsung_send_cmd(avc_ctrl, PANEL_AVC_ON);
-
-}
-
 static int mdss_panel_on_pre(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	struct samsung_display_driver_data *vdd = check_valid_ctrl(ctrl);
