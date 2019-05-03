@@ -19,6 +19,10 @@
 #include <linux/types.h>
 #include <linux/debugfs.h>
 
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+#include <linux/lcd.h>
+#include <dlog.h>
+#endif
 /* panel id type */
 struct panel_id {
 	u16 id;
@@ -29,6 +33,9 @@ struct panel_id {
 #define DEFAULT_ROTATOR_FRAME_RATE 120
 #define MDSS_DSI_RST_SEQ_LEN	10
 #define MDSS_MDP_MAX_FETCH 12
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+#define MAX_PANEL_NAME_SIZE 100
+#endif
 
 /* panel type list */
 #define NO_PANEL		0xffff	/* No Panel */
@@ -98,6 +105,9 @@ enum {
 	MDSS_PANEL_BLANK_BLANK = 0,
 	MDSS_PANEL_BLANK_UNBLANK,
 	MDSS_PANEL_BLANK_LOW_POWER,
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	MDSS_PANEL_BLANK_READY_TO_UNBLANK,
+#endif
 };
 
 enum {
@@ -215,6 +225,10 @@ enum mdss_intf_events {
 	MDSS_EVENT_DSI_DYNAMIC_SWITCH,
 	MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
 	MDSS_EVENT_DSI_PANEL_STATUS,
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	MDSS_SAMSUNG_EVENT_FRAME_UPDATE,
+	MDSS_SAMSUNG_EVENT_FB_EVENT_CALLBACK,
+#endif
 };
 
 struct lcd_panel_info {
@@ -311,6 +325,11 @@ struct mipi_panel_info {
 #ifdef CONFIG_MACH_YULONG
 	char has_tps65132;
 #endif
+
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	u32  power_off_delay;
+	u32  additional_delay;
+#endif
 };
 
 struct edp_panel_info {
@@ -395,6 +414,13 @@ struct mdss_panel_info {
 	u32 rst_seq[MDSS_DSI_RST_SEQ_LEN];
 	u32 rst_seq_len;
 	u32 vic; /* video identification code */
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	u32 roi_x;
+	u32 roi_y;
+	u32 roi_w;
+	u32 roi_h;
+	int bklt_ctrl;	/* backlight ctrl */
+#endif
 	struct mdss_rect roi;
 	int pwm_pmic_gpio;
 	int pwm_lpg_chan;
@@ -426,6 +452,9 @@ struct mdss_panel_info {
 	u32 partial_update_roi_merge;
 	struct ion_handle *splash_ihdl;
 	int panel_power_state;
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	u32 panel_power_on;
+#endif
 	int blank_state;
 
 	uint32_t panel_dead;
@@ -447,14 +476,43 @@ struct mdss_panel_info {
 
 	/* debugfs structure for the panel */
 	struct mdss_panel_debugfs_info *debugfs_info;
-
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	int panel_state;
+#endif
 	struct mdss_livedisplay_ctx *livedisplay;
 };
+
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+struct mipi_samsung_driver_data {
+	struct msm_fb_data_type *mfd;
+	struct mdss_panel_data *pdata;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata;
+	struct mutex lock;
+
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+	struct early_suspend early_suspend;
+#endif
+	char panel_name[MAX_PANEL_NAME_SIZE];
+	int panel;
+	unsigned int manufacture_id;
+	unsigned int manufacture_date;
+	char ddi_id[5];
+	unsigned int id3;
+	struct smartdim_conf *sdimconf;
+	struct lcd_device *lcd_device;
+	void *mdss_panel_data;
+	void *mdss_dsi_ctrl_pdata;
+	struct mdss_livedisplay_ctx *livedisplay;
+};
+#endif
 
 struct mdss_panel_data {
 	struct mdss_panel_info panel_info;
 	void (*set_backlight) (struct mdss_panel_data *pdata, u32 bl_level);
 	unsigned char *mmss_cc_base;
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	struct mipi_samsung_driver_data samsung_pdata;
+#endif
 
 	/**
 	 * event_handler() - callback handler for MDP core events
@@ -471,6 +529,9 @@ struct mdss_panel_data {
 	int (*event_handler) (struct mdss_panel_data *pdata, int e, void *arg);
 
 	struct mdss_panel_data *next;
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	void *panel_private;
+#endif
 };
 
 struct mdss_panel_debugfs_info {

@@ -802,7 +802,13 @@ int mdss_mdp_wb_ioctl_handler(struct msm_fb_data_type *mfd, u32 cmd,
 		}
 		break;
 	case MSMFB_WRITEBACK_TERMINATE:
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		mdss_iommu_ctrl(1);
+#endif
 		ret = mdss_mdp_wb_terminate(mfd);
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		mdss_iommu_ctrl(0);
+#endif
 		break;
 	case MSMFB_WRITEBACK_SET_MIRRORING_HINT:
 		if (!copy_from_user(&hint, arg, sizeof(hint))) {

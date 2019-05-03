@@ -35,6 +35,9 @@
 #define CEIL(x, y)		(((x) + ((y) - 1)) / (y))
 
 struct mdss_dsi_ctrl_pdata *ctrl_list[DSI_CTRL_MAX];
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+static struct mdss_dsi_ctrl_pdata *ctrl_backup;
+#endif
 
 struct mdss_hw mdss_dsi0_hw = {
 	.hw_ndx = MDSS_HW_DSI0,
@@ -76,6 +79,12 @@ static struct mdss_dsi_event dsi_event;
 
 static int dsi_event_thread(void *data);
 
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+struct mdss_dsi_ctrl_pdata **mdss_dsi_get_ctrl(void)
+{
+	return ctrl_list;
+}
+#endif
 void mdss_dsi_ctrl_init(struct device *ctrl_dev,
 			struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -364,7 +373,19 @@ void mdss_dsi_host_init(struct mdss_panel_data *pdata)
 	if (pinfo->data_lane0)
 		dsi_ctrl |= BIT(4);
 
-
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	/* from frame buffer, low power mode */
+	/* DSI_COMMAND_MODE_DMA_CTRL */
+/*
+	if (mdss_dsi_broadcast_mode_enabled())
+		MIPI_OUTP(ctrl_pdata->ctrl_base + 0x3C, 0x94000000);
+	else
+		MIPI_OUTP(ctrl_pdata->ctrl_base + 0x3C, 0x14000000);
+*/
+#if defined(CONFIG_SEC_GT510_PROJECT)
+	MIPI_OUTP(ctrl_pdata->ctrl_base + 0x3C, 0x10000000);
+#endif
+#endif
 	data = 0;
 	if (pinfo->te_sel)
 		data |= BIT(31);
@@ -925,7 +946,11 @@ void mdss_dsi_op_mode_config(int mode,
 			DSI_INTR_CMD_MDP_DONE_MASK | DSI_INTR_BTA_DONE_MASK;
 	}
 
-	dma_ctrl = BIT(28) | BIT(26);	/* embedded mode & LP mode */
+	dma_ctrl = BIT(28)
+#if !defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	| BIT(26)
+#endif
+	;	/* embedded mode & LP mode */
 	if (mdss_dsi_sync_wait_enable(ctrl_pdata))
 		dma_ctrl |= BIT(31);
 
@@ -2009,6 +2034,9 @@ void mdss_dsi_cmd_mdp_start(struct mdss_dsi_ctrl_pdata *ctrl)
 	spin_lock_irqsave(&ctrl->mdp_lock, flag);
 	mdss_dsi_enable_irq(ctrl, DSI_MDP_TERM);
 	ctrl->mdp_busy = true;
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	ctrl_backup = ctrl;
+#endif
 	INIT_COMPLETION(ctrl->mdp_comp);
 	MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, current->pid);
 	spin_unlock_irqrestore(&ctrl->mdp_lock, flag);
@@ -2226,6 +2254,10 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 
 	if (req->flags & CMD_REQ_HS_MODE)
 		mdss_dsi_set_tx_power_mode(0, &ctrl->panel_data);
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	else if (req->flags & CMD_REQ_LP_MODE)
+		mdss_dsi_set_tx_power_mode(1, &ctrl->panel_data);
+#endif
 
 	if (req->flags & CMD_REQ_RX)
 		ret = mdss_dsi_cmdlist_rx(ctrl, req);
@@ -2234,7 +2266,11 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 
 	if (req->flags & CMD_REQ_HS_MODE)
 		mdss_dsi_set_tx_power_mode(1, &ctrl->panel_data);
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	else if (req->flags & CMD_REQ_LP_MODE)
+		mdss_dsi_set_tx_power_mode(0, &ctrl->panel_data);
 
+#endif
 	if (!(req->flags & CMD_REQ_DMA_TPG)) {
 		if (ctrl->mdss_util->iommu_ctrl)
 			ctrl->mdss_util->iommu_ctrl(0);
@@ -2625,3 +2661,28 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 
 	return IRQ_HANDLED;
 }
+
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+void mdss_dsi_check_te(void)
+{
+	u8 rc, te_count = 0;
+	u8 te_max = 250;
+
+	if(!ctrl_backup->disp_te_gpio)
+		return;
+
+	pr_info(" ============ start waiting for TE ============\n");
+	for (te_count = 0 ; te_count < te_max ; te_count++)
+	{
+		rc = gpio_get_value(ctrl_backup->disp_te_gpio);
+		if(rc != 0)
+		{
+			pr_info("%s: gpio_get_value(ctrl_pdata->disp_te_gpio) = %d, te_count = %d\n",
+				__func__, rc, te_count);
+			break;
+		}
+		udelay(80);
+	}
+	pr_info(" ============ finish waiting for TE ============\n");
+}
+#endif

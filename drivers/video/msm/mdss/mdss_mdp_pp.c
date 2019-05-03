@@ -23,6 +23,21 @@
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
 
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+struct mdp_csc_cfg mdp_csc_convert_wideband = {
+	0,
+	{
+		0x0200, 0x0000, 0x02CD,
+		0x0200, 0xFF4F, 0xFE91,
+		0x0200, 0x038B, 0x0000,
+	},
+	{ 0x0, 0xFF80, 0xFF80,},
+	{ 0x0, 0x0, 0x0,},
+	{ 0x0, 0xFF, 0x0, 0xFF, 0x0, 0xFF,},
+	{ 0x0, 0xFF, 0x0, 0xFF, 0x0, 0xFF,},
+};
+#endif
+
 struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
 	[MDSS_MDP_CSC_YUV2RGB_601L] = {
 		0,
@@ -612,7 +627,17 @@ int mdss_mdp_csc_setup(u32 block, u32 blk_idx, u32 csc_type)
 	pr_debug("csc type=%d blk=%d idx=%d\n", csc_type,
 		 block, blk_idx);
 
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	if (csc_type == MDSS_MDP_CSC_YUV2RGB_601L && !csc_update) {
+		data = &mdp_csc_convert_wideband;
+		pr_debug("will do mdp_csc_convert (wide band)\n");
+	} else {
 	data = &mdp_csc_convert[csc_type];
+		pr_debug("will do mdp_csc_convert (narrow band)\n");
+	}
+#else
+	data = &mdp_csc_convert[csc_type];
+#endif
 	return mdss_mdp_csc_setup_data(block, blk_idx, data);
 }
 
@@ -930,7 +955,14 @@ static int pp_vig_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 			opmode |= (0 << 19) |	/* DST_DATA=RGB */
 				  (1 << 18) |	/* SRC_DATA=YCBCR */
 				  (1 << 17);	/* CSC_1_EN */
-
+		/*
+		 * TODO: Needs to be part of dirty bit logic: if there
+		 * is a previously configured pipe need to re-configure
+		 * CSC matrix
+		 */
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		if ((pipe->play_cnt == 0))
+#endif
 			mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num,
 					   pp_vig_csc_pipe_val(pipe));
 		}

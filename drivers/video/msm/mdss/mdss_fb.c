@@ -56,6 +56,10 @@
 
 #include "mdss_livedisplay.h"
 
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+#include "samsung/ss_dsi_panel_common.h" /* UTIL HEADER */
+#endif
+
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
 #else
@@ -1274,9 +1278,14 @@ static void mdss_fb_stop_disp_thread(struct msm_fb_data_type *mfd)
 {
 	pr_debug("%pS: stop display thread fb%d\n",
 		__builtin_return_address(0), mfd->index);
-
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	mutex_lock(&mfd->mdp_sync_pt_data.sync_mutex);
+#endif
 	kthread_stop(mfd->disp_thread);
 	mfd->disp_thread = NULL;
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	mutex_unlock(&mfd->mdp_sync_pt_data.sync_mutex);
+#endif
 }
 
 static void mdss_panel_validate_debugfs_info(struct msm_fb_data_type *mfd)
@@ -1345,6 +1354,9 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 		if (mfd->disp_thread)
 			mdss_fb_stop_disp_thread(mfd);
 		mutex_lock(&mfd->bl_lock);
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		current_bl = mfd->bl_level;
+#endif
 		mdss_fb_set_backlight(mfd, 0);
 		mfd->allow_bl_update = false;
 		mfd->unset_bl_level = current_bl;
@@ -1446,6 +1458,9 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	int ret = 0;
 	int cur_power_state, req_power_state = MDSS_PANEL_POWER_OFF;
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	struct samsung_display_driver_data *vdd = samsung_get_vdd();
+#endif
 
 	if (!mfd || !op_enable)
 		return -EPERM;
@@ -1478,6 +1493,11 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 				blank_mode = FB_BLANK_POWERDOWN;
 		}
 	}
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		if (info->node <= (SUPPORT_PANEL_COUNT - 1))
+					vdd->vdd_blank_mode[info->node] =  blank_mode;
+#endif
+
 
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
@@ -2111,6 +2131,11 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	var->right_margin = panel_info->lcdc.h_front_porch;
 	var->hsync_len = panel_info->lcdc.h_pulse_width;
 	var->pixclock = panel_info->clk_rate / 1000;
+#if defined(CONFIG_PANEL_S6D7AA0_LTL101AT01_WXGA) || defined(CONFIG_PANEL_S6D7AA0_LSL080AL03_WXGA)
+	/*Temporary change to support XGA resolution*/
+	var->xres = 768;
+	var->yres = 1024;
+#endif
 
 	/*
 	 * Store the cont splash state in the var reserved[3] field.
@@ -2751,10 +2776,12 @@ static int mdss_fb_pan_display_ex(struct fb_info *info,
 	mfd->msm_fb_backup.info = *info;
 	mfd->msm_fb_backup.disp_commit = *disp_commit;
 
-	atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);
-	atomic_inc(&mfd->commits_pending);
-	atomic_inc(&mfd->kickoff_pending);
-	wake_up_all(&mfd->commit_wait_q);
+	if (mfd->disp_thread) {
+		atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);
+		atomic_inc(&mfd->commits_pending);
+		atomic_inc(&mfd->kickoff_pending);
+		wake_up_all(&mfd->commit_wait_q);
+	}
 	mutex_unlock(&mfd->mdp_sync_pt_data.sync_mutex);
 	if (wait_for_finish)
 		mdss_fb_pan_idle(mfd);
@@ -3715,3 +3742,22 @@ int mdss_fb_suspres_panel(struct device *dev, void *data)
 	}
 	return rc;
 }
+
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+void mdss_samsung_update_brightness_value(void)
+{
+	int bl_lvl;
+	struct samsung_display_driver_data *vdd = samsung_get_vdd();
+	struct msm_fb_data_type *mfd = dev_get_drvdata(backlight_led.dev->parent);
+
+	if((vdd->bl_level == 0) && (backlight_led.brightness != 0)) {
+		MDSS_BRIGHT_TO_BL(bl_lvl, backlight_led.brightness, mfd->panel_info->bl_max,
+				mfd->panel_info->brightness_max);
+		if (!IS_CALIB_MODE_BL(mfd))
+			mdss_fb_scale_bl(mfd, &bl_lvl);
+		vdd->bl_level = bl_lvl;
+	}
+}
+EXPORT_SYMBOL(mdss_samsung_update_brightness_value);
+#endif
+
