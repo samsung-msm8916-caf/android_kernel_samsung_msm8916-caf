@@ -25,6 +25,13 @@
 #include <soc/qcom/smem.h>
 #include <soc/qcom/spm.h>
 #include <soc/qcom/pm.h>
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_THERMISTOR
+#include <linux/sec_thermistor.h>
+#include <linux/msm8916-thermistor.h>
+#endif
 #include "board-dt.h"
 #include "platsmp.h"
 
@@ -37,6 +44,12 @@ static void __init msm8916_map_io(void)
 {
 	msm_map_msm8916_io();
 }
+
+static struct platform_device *common_devices[] __initdata = {
+#ifdef CONFIG_SEC_THERMISTOR
+	&sec_device_thermistor,
+#endif
+};
 
 static struct of_dev_auxdata msm8916_auxdata_lookup[] __initdata = {
 	{}
@@ -56,6 +69,19 @@ void __init msm8916_add_drivers(void)
 	msm_pm_sleep_status_init();
 }
 
+struct class *sec_class;
+EXPORT_SYMBOL(sec_class);
+
+static void samsung_sys_class_init(void)
+{
+	sec_class = class_create(THIS_MODULE, "sec");
+
+	if (IS_ERR(sec_class)) {
+		pr_err("Failed to create class(sec)!\n");
+		return;
+	}
+};
+
 static void __init msm8916_init(void)
 {
 	struct of_dev_auxdata *adata = msm8916_auxdata_lookup;
@@ -71,7 +97,9 @@ static void __init msm8916_init(void)
 	if (socinfo_init() < 0)
 		pr_err("%s: socinfo_init() failed\n", __func__);
 
+	samsung_sys_class_init();
 	msm8916_add_drivers();
+	platform_add_devices(common_devices, ARRAY_SIZE(common_devices));
 }
 
 static const char *msm8916_dt_match[] __initconst = {
