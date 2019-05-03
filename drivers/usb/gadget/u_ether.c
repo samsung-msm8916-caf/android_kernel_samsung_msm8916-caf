@@ -93,9 +93,9 @@ struct eth_dev {
 
 	spinlock_t		req_lock;	/* guard {rx,tx}_reqs */
 	struct list_head	tx_reqs, rx_reqs;
-	atomic_t		tx_qlen;
+	unsigned		tx_qlen;
 /* Minimum number of TX USB request queued to UDC */
-#define TX_REQ_THRESHOLD	5
+#define MAX_TX_REQ_WITH_NO_INT	5
 	int			no_tx_req_used;
 	int			tx_skb_hold_count;
 	u32			tx_req_bufsize;
@@ -634,12 +634,34 @@ static void process_rx_w(struct work_struct *work)
 				|| ETH_HLEN > skb->len
 				|| (skb->len > ETH_FRAME_LEN &&
 				test_bit(RMNET_MODE_LLP_ETH, &dev->flags))) {
+#ifdef CONFIG_USB_NCM_SUPPORT_MTU_CHANGE
+		/*
+		  Need to revisit net->mtu  does not include header size incase of changed MTU
+		*/
+			if(!strcmp(dev->port_usb->func.name,"ncm")) {
+				if (status < 0
+					|| ETH_HLEN > skb->len
+					|| skb->len > (dev->net->mtu + ETH_HLEN)) {
+					printk(KERN_ERR "usb: %s  drop incase of NCM rx length %d\n",__func__,skb->len);
+				} else {
+					printk(KERN_ERR "usb: %s  Dont drop incase of NCM rx length %d\n",__func__,skb->len);
+					goto process_frame;
+				}
+			}
+#endif
 			dev->net->stats.rx_errors++;
 			dev->net->stats.rx_length_errors++;
+#ifndef CONFIG_USB_NCM_SUPPORT_MTU_CHANGE
 			DBG(dev, "rx length %d\n", skb->len);
+#else
+			printk(KERN_ERR "usb: %s Drop rx length %d\n",__func__,skb->len);
+#endif
 			dev_kfree_skb_any(skb);
 			continue;
 		}
+#ifdef CONFIG_USB_NCM_SUPPORT_MTU_CHANGE
+process_frame:
+#endif
 		if (test_bit(RMNET_MODE_LLP_IP, &dev->flags))
 			skb->protocol = ether_ip_type_trans(skb, dev->net);
 		else
@@ -721,12 +743,12 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 	dev->net->stats.tx_packets += n;
 
 	spin_lock(&dev->req_lock);
-	list_add_tail(&req->list, &dev->tx_reqs);
 
 	if (req->num_sgs) {
 		if (!req->status)
 			queue_work(uether_tx_wq, &dev->tx_work);
 
+		list_add_tail(&req->list, &dev->tx_reqs);
 		spin_unlock(&dev->req_lock);
 		return;
 	}
@@ -736,7 +758,8 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 		req->length = 0;
 		in = dev->port_usb->in_ep;
 
-		if (!list_empty(&dev->tx_reqs)) {
+		/* Do not process further if no_interrupt is set */
+		if (!req->no_interrupt && !list_empty(&dev->tx_reqs)) {
 			new_req = container_of(dev->tx_reqs.next,
 					struct usb_request, list);
 			list_del(&new_req->list);
@@ -764,11 +787,25 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 					length++;
 				}
 
+				/* set when tx completion interrupt needed */
+				spin_lock(&dev->req_lock);
+				dev->tx_qlen++;
+				if (dev->tx_qlen == MAX_TX_REQ_WITH_NO_INT) {
+					new_req->no_interrupt = 0;
+					dev->tx_qlen = 0;
+				} else {
+					new_req->no_interrupt = 1;
+				}
+				spin_unlock(&dev->req_lock);
 				new_req->length = length;
 				retval = usb_ep_queue(in, new_req, GFP_ATOMIC);
 				switch (retval) {
 				default:
+#ifndef CONFIG_USB_NCM_SUPPORT_MTU_CHANGE
 					DBG(dev, "tx queue err %d\n", retval);
+#else
+					printk(KERN_ERR"usb:%s tx queue err %d\n",__func__, retval);
+#endif
 					new_req->length = 0;
 					spin_lock(&dev->req_lock);
 					list_add_tail(&new_req->list,
@@ -809,7 +846,11 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 		dev_kfree_skb_any(skb);
 	}
 
-	atomic_dec(&dev->tx_qlen);
+	/* put the completed req back to tx_reqs tail pool */
+	spin_lock(&dev->req_lock);
+	list_add_tail(&req->list, &dev->tx_reqs);
+	spin_unlock(&dev->req_lock);
+
 	if (netif_carrier_ok(dev->net))
 		netif_wake_queue(dev->net);
 }
@@ -1134,7 +1175,14 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 		spin_lock_irqsave(&dev->req_lock, flags);
 		dev->tx_skb_hold_count++;
 		if (dev->tx_skb_hold_count < dev->dl_max_pkts_per_xfer) {
-			if (dev->no_tx_req_used > TX_REQ_THRESHOLD) {
+
+			/*
+			 * should allow aggregation only, if the number of
+			 * requests queued more than the tx requests that can
+			 *  be queued with no interrupt flag set sequentially.
+			 * Otherwise, packets may be blocked forever.
+			 */
+			if (dev->no_tx_req_used > MAX_TX_REQ_WITH_NO_INT) {
 				list_add(&req->list, &dev->tx_reqs);
 				spin_unlock_irqrestore(&dev->req_lock, flags);
 				goto success;
@@ -1176,7 +1224,6 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 		break;
 	case 0:
 		net->trans_start = jiffies;
-		atomic_inc(&dev->tx_qlen);
 	}
 
 	if (retval) {
@@ -1205,7 +1252,7 @@ static void eth_start(struct eth_dev *dev, gfp_t gfp_flags)
 	rx_fill(dev, gfp_flags);
 
 	/* and open the tx floodgates */
-	atomic_set(&dev->tx_qlen, 0);
+	dev->tx_qlen = 0;
 	netif_wake_queue(dev->net);
 }
 
@@ -1593,13 +1640,19 @@ struct eth_dev *gether_setup_name(struct usb_gadget *g, u8 ethaddr[ETH_ALEN],
 	if (get_ether_addr(dev_addr, net->dev_addr))
 		dev_warn(&g->dev,
 			"using random %s ethernet address\n", "self");
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	if (ethaddr != NULL) {
+		memcpy(dev->host_mac, ethaddr, ETH_ALEN);
+		printk(KERN_DEBUG "usb: set unique host mac\n");
+	}
+#else
 	if (get_ether_addr(host_addr, dev->host_mac))
 		dev_warn(&g->dev,
 			"using random %s ethernet address\n", "host");
 
 	if (ethaddr)
 		memcpy(ethaddr, dev->host_mac, ETH_ALEN);
-
+#endif
 	net->netdev_ops = &eth_netdev_ops;
 
 	SET_ETHTOOL_OPS(net, &ops);

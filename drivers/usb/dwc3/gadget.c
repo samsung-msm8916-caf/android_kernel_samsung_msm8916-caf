@@ -394,10 +394,10 @@ int dwc3_send_gadget_generic_command(struct dwc3 *dwc, int cmd, u32 param)
 		if (!(reg & DWC3_DGCMD_CMDACT)) {
 			dev_vdbg(dwc->dev, "Command Complete --> %d\n",
 					DWC3_DGCMD_STATUS(reg));
-			ret = 0;
 			if (DWC3_DGCMD_STATUS(reg))
-				ret = -EINVAL;
-			break;
+				return -EINVAL;
+			return 0;
+                        break;
 		}
 
 		/*
@@ -446,11 +446,12 @@ int dwc3_send_gadget_ep_cmd(struct dwc3 *dwc, unsigned ep,
 			 */
 			if (reg & 0x2000)
 				ret = -EAGAIN;
-			else if (DWC3_DEPCMD_STATUS(reg))
-				ret = -EINVAL;
 			else
 				ret = 0;
-			break;
+			if (DWC3_DEPCMD_STATUS(reg))
+				return -EINVAL;
+			return 0;
+                        break;
 		}
 
 		/*
@@ -1094,8 +1095,10 @@ static void dwc3_prepare_trbs(struct dwc3_ep *dep, bool starting)
 					struct usb_request *ureq;
 					bool mpkt = false;
 
+					if (list_empty(&dep->request_list))
+						last_one = true;
 					chain = false;
-					if (list_empty(&dep->request_list)) {
+					if (last_req) {
 						last_one = true;
 						goto start_trb_queuing;
 					}

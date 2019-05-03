@@ -110,7 +110,9 @@ static int hvdcp_max_current = IDEV_HVDCP_CHG_MAX;
 module_param(hvdcp_max_current, int, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(hvdcp_max_current, "max current drawn for HVDCP charger");
 
+#ifdef OTG_WAIT_PMIC
 static DECLARE_COMPLETION(pmic_vbus_init);
+#endif
 static struct msm_otg *the_msm_otg;
 static bool debug_aca_enabled;
 static bool debug_bus_voting_enabled;
@@ -119,9 +121,7 @@ static bool mhl_det_in_progress;
 static struct regulator *hsusb_3p3;
 static struct regulator *hsusb_1p8;
 static struct regulator *hsusb_vdd;
-#if !defined(CONFIG_MACH_JALEBI) && !defined(CONFIG_YL_BQ24157_CHARGER) && !defined(CONFIG_YL_FAN5405_CHARGER)
 static struct regulator *vbus_otg;
-#endif
 static struct regulator *mhl_usb_hs_switch;
 static struct power_supply *psy;
 
@@ -1865,6 +1865,7 @@ static void msm_otg_notify_host_mode(struct msm_otg *motg, bool host_mode)
 	}
 }
 
+#ifdef OTG_WAIT_PMIC
 static int msm_otg_notify_chg_type(struct msm_otg *motg)
 {
 	static int charger_type;
@@ -1939,7 +1940,9 @@ psy_error:
 	dev_dbg(motg->phy.dev, "power supply error when setting property\n");
 	return -ENXIO;
 }
+#endif
 
+#ifdef OTG_WAIT_PMIC
 static void msm_otg_set_online_status(struct msm_otg *motg)
 {
 	if (!psy) {
@@ -1951,9 +1954,11 @@ static void msm_otg_set_online_status(struct msm_otg *motg)
 	if (power_supply_set_online(psy, false))
 		dev_dbg(motg->phy.dev, "error setting power supply property\n");
 }
+#endif
 
 static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 {
+#ifdef OTG_WAIT_PMIC
 	struct usb_gadget *g = motg->phy.otg->gadget;
 
 	if (g && g->is_a_peripheral)
@@ -1993,6 +1998,7 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 		pm8921_charger_vbus_draw(mA);
 
 	motg->cur_power = mA;
+#endif
 }
 
 static int msm_otg_set_power(struct usb_phy *phy, unsigned mA)
@@ -2130,78 +2136,6 @@ out:
 	return NOTIFY_OK;
 }
 
-#ifdef CONFIG_MACH_JALEBI
-#define OTG_PINCTRL_STATE_ACTIVE "active"
-#define OTG_PINCTRL_STATE_SLEEP "sleep"
-
-static int otg_dsi_pinctrl_set_state(struct msm_otg_platform_data *ctrl_pdata, bool active)
-{
-	struct pinctrl_state *pin_state;
-	int rc = -EFAULT;
-
-	if (IS_ERR_OR_NULL(ctrl_pdata->pin_res.pinctrl))
-		return PTR_ERR(ctrl_pdata->pin_res.pinctrl);
-
-	pin_state = active ? ctrl_pdata->pin_res.gpio_state_active :
-		ctrl_pdata->pin_res.gpio_state_suspend;
-	if (!IS_ERR_OR_NULL(pin_state)) {
-		rc = pinctrl_select_state(ctrl_pdata->pin_res.pinctrl, pin_state);
-		if (rc)
-		    pr_err("%s: can not set %s pins\n", __func__,
-		            active ? OTG_PINCTRL_STATE_ACTIVE : OTG_PINCTRL_STATE_SLEEP);
-	} else {
-		pr_err("%s: invalid '%s' pinstate\n", __func__,
-		        active ? OTG_PINCTRL_STATE_ACTIVE : OTG_PINCTRL_STATE_SLEEP);
-	}
-
-	return rc;
-}
-
-static int otg_pinctrl_init(struct platform_device *pdev)
-{
-	struct msm_otg *motg;
-	struct msm_otg_platform_data *ctrl_pdata;
-
-	motg = platform_get_drvdata(pdev);
-	ctrl_pdata = motg->pdata;
-
-	ctrl_pdata->pin_res.pinctrl = devm_pinctrl_get(&pdev->dev);
-	if (IS_ERR_OR_NULL(ctrl_pdata->pin_res.pinctrl)) {
-		pr_err("%s: failed to get pinctrl\n", __func__);
-		return PTR_ERR(ctrl_pdata->pin_res.pinctrl);
-	}
-
-	ctrl_pdata->pin_res.gpio_state_active = pinctrl_lookup_state(ctrl_pdata->pin_res.pinctrl,
-		OTG_PINCTRL_STATE_ACTIVE);
-	if (IS_ERR_OR_NULL(ctrl_pdata->pin_res.gpio_state_active))
-		pr_warn("%s: can not get default pinstate\n", __func__);
-
-	ctrl_pdata->pin_res.gpio_state_suspend = pinctrl_lookup_state(ctrl_pdata->pin_res.pinctrl,
-		OTG_PINCTRL_STATE_SLEEP);
-	if (IS_ERR_OR_NULL(ctrl_pdata->pin_res.gpio_state_suspend))
-		pr_warn("%s: can not get sleep pinstate\n", __func__);
-
-	return 0;
-}
-
-static int otg_enable(struct msm_otg_platform_data *pdata, bool enable)
-{
-	int ret = 0;
-
-	ret = otg_dsi_pinctrl_set_state(pdata, enable);
-	gpio_direction_output(pdata->otg5v_en_gpio, enable);
-
-	return ret;
-}
-#endif
-
-#ifdef CONFIG_YL_FAN5405_CHARGER
-extern int fan5405_enable_otg_mode(bool);
-#endif
-#ifdef CONFIG_YL_BQ24157_CHARGER
-extern int bq24157_enable_otg_mode(bool);
-#endif
-
 static void msm_hsusb_vbus_power(struct msm_otg *motg, bool on)
 {
 	int ret;
@@ -2218,12 +2152,10 @@ static void msm_hsusb_vbus_power(struct msm_otg *motg, bool on)
 		return;
 	}
 
-#if !defined(CONFIG_MACH_JALEBI) && !defined(CONFIG_YL_BQ24157_CHARGER) && !defined(CONFIG_YL_FAN5405_CHARGER)
 	if (!vbus_otg) {
 		pr_err("vbus_otg is NULL.");
 		return;
 	}
-#endif
 
 	/*
 	 * if entering host mode tell the charger to not draw any current
@@ -2233,36 +2165,14 @@ static void msm_hsusb_vbus_power(struct msm_otg *motg, bool on)
 	 */
 	if (on) {
 		msm_otg_notify_host_mode(motg, on);
-#ifdef CONFIG_MACH_JALEBI
-		ret = otg_enable(motg->pdata, true);
-#endif
-#ifdef CONFIG_YL_BQ24157_CHARGER
-		ret = bq24157_enable_otg_mode(true);
-#endif
-#ifdef CONFIG_YL_FAN5405_CHARGER
-		ret = fan5405_enable_otg_mode(true);
-#endif
-#if !defined(CONFIG_MACH_JALEBI) && !defined(CONFIG_YL_BQ24157_CHARGER) && !defined(CONFIG_YL_FAN5405_CHARGER)
 		ret = regulator_enable(vbus_otg);
-#endif
 		if (ret) {
 			pr_err("unable to enable vbus_otg\n");
 			return;
 		}
 		vbus_is_on = true;
 	} else {
-#ifdef CONFIG_MACH_JALEBI
-		ret = otg_enable(motg->pdata, false);
-#endif
-#ifdef CONFIG_YL_BQ24157_CHARGER
-		ret = bq24157_enable_otg_mode(false);
-#endif
-#ifdef CONFIG_YL_FAN5405_CHARGER
-		ret = fan5405_enable_otg_mode(false);
-#endif
-#if !defined(CONFIG_MACH_JALEBI) && !defined(CONFIG_YL_BQ24157_CHARGER) && !defined(CONFIG_YL_FAN5405_CHARGER)
 		ret = regulator_disable(vbus_otg);
-#endif
 		if (ret) {
 			pr_err("unable to disable vbus_otg\n");
 			return;
@@ -2286,7 +2196,6 @@ static int msm_otg_set_host(struct usb_otg *otg, struct usb_bus *host)
 		return -ENODEV;
 	}
 
-#if !defined(CONFIG_MACH_JALEBI) && !defined(CONFIG_YL_BQ24157_CHARGER) && !defined(CONFIG_YL_FAN5405_CHARGER)
 	if (!motg->pdata->vbus_power && host) {
 		vbus_otg = devm_regulator_get(motg->phy.dev, "vbus_otg");
 		if (IS_ERR(vbus_otg)) {
@@ -2297,7 +2206,6 @@ static int msm_otg_set_host(struct usb_otg *otg, struct usb_bus *host)
 			return PTR_ERR(vbus_otg);
 		}
 	}
-#endif
 
 	if (!host) {
 		if (otg->phy->state == OTG_STATE_A_HOST) {
@@ -3148,7 +3056,9 @@ static void msm_chg_detect_work(struct work_struct *w)
 				init_completion(&motg->ext_chg_wait);
 				motg->ext_chg_active = DEFAULT;
 		}
+#ifdef OTG_WAIT_PMIC
 		msm_otg_notify_chg_type(motg);
+#endif
 		msm_chg_block_off(motg);
 		msm_chg_enable_aca_det(motg);
 		/*
@@ -3191,7 +3101,9 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 {
 	struct msm_otg_platform_data *pdata = motg->pdata;
 	u32 otgsc = readl(USB_OTGSC);
+#ifdef OTG_WAIT_PMIC
 	int ret;
+#endif
 
 	switch (pdata->mode) {
 	case USB_OTG:
@@ -3218,10 +3130,14 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 				clear_bit(B_SESS_VLD, &motg->inputs);
 		} else if (pdata->otg_control == OTG_PMIC_CONTROL) {
 			if (pdata->pmic_id_irq) {
+#ifdef OTG_WAIT_PMIC
 				if (msm_otg_read_pmic_id_state(motg))
 					set_bit(ID, &motg->inputs);
 				else
 					clear_bit(ID, &motg->inputs);
+#else
+				set_bit(ID, &motg->inputs);
+#endif
 			} else if (motg->ext_id_irq) {
 				if (gpio_get_value(pdata->usb_id_gpio))
 					set_bit(ID, &motg->inputs);
@@ -3232,7 +3148,11 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 					set_bit(ID, &motg->inputs);
 				else
 					clear_bit(ID, &motg->inputs);
+			} else {
+				set_bit(ID, &motg->inputs);
 			}
+
+#ifdef OTG_WAIT_PMIC
 			/*
 			 * VBUS initial state is reported after PMIC
 			 * driver initialization. Wait for it.
@@ -3248,6 +3168,7 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 				clear_bit(B_SESS_VLD, &motg->inputs);
 				pmic_vbus_init.done = 1;
 			}
+#endif
 		}
 		break;
 	case USB_HOST:
@@ -3261,6 +3182,7 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 			else
 				clear_bit(B_SESS_VLD, &motg->inputs);
 		} else if (pdata->otg_control == OTG_PMIC_CONTROL) {
+#ifdef OTG_WAIT_PMIC
 			/*
 			 * VBUS initial state is reported after PMIC
 			 * driver initialization. Wait for it.
@@ -3276,6 +3198,7 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 				clear_bit(B_SESS_VLD, &motg->inputs);
 				pmic_vbus_init.done = 1;
 			}
+#endif
 		} else if (pdata->otg_control == OTG_USER_CONTROL) {
 			set_bit(ID, &motg->inputs);
 			set_bit(B_SESS_VLD, &motg->inputs);
@@ -3351,7 +3274,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		msm_otg_reset(otg->phy);
 		msm_otg_init_sm(motg);
 		if (!psy && legacy_power_supply) {
-			psy = power_supply_get_by_name("usb");
+			psy = power_supply_get_by_name("msm-usb");
 
 			if (!psy)
 				pr_err("couldn't get usb power supply\n");
@@ -3448,9 +3371,6 @@ static void msm_otg_sm_work(struct work_struct *w)
 						OTG_STATE_B_PERIPHERAL;
 					break;
 				case USB_SDP_CHARGER:
-#ifdef CONFIG_MACH_YULONG
-					msm_otg_set_power(otg->phy, 500);
-#endif
 					msm_otg_start_peripheral(otg, 1);
 					otg->phy->state =
 						OTG_STATE_B_PERIPHERAL;
@@ -3504,6 +3424,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			 * switch from ACA to PMIC.  Check ID state
 			 * before entering into low power mode.
 			 */
+#ifdef OTG_WAIT_PMIC
 			if ((motg->pdata->otg_control == OTG_PMIC_CONTROL) &&
 					!msm_otg_read_pmic_id_state(motg)) {
 				pr_debug("process missed ID intr\n");
@@ -3518,6 +3439,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 					"PM RUNTIME: NOCHG PUT",
 					get_pm_runtime_counter(otg->phy->dev),
 					motg->pm_done);
+#endif
 			pm_runtime_put_noidle(otg->phy->dev);
 			/*
 			 * Only if autosuspend was enabled in probe, it will be
@@ -4278,6 +4200,7 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 static void msm_otg_set_vbus_state(int online)
 {
 	struct msm_otg *motg = the_msm_otg;
+#ifdef OTG_WAIT_PMIC
 	static bool init;
 
 	if (online) {
@@ -4293,7 +4216,19 @@ static void msm_otg_set_vbus_state(int online)
 		if (!test_and_clear_bit(B_SESS_VLD, &motg->inputs) && init)
 			return;
 	}
+#else
+	if (online) {
+		pr_info("PMIC: BSV set\n");
+		set_bit(B_SESS_VLD, &motg->inputs);
+		motg->chg_state = USB_CHG_STATE_DETECTED;
+		motg->chg_type = USB_SDP_CHARGER;
+	} else {
+		pr_info("PMIC: BSV clear\n");
+		clear_bit(B_SESS_VLD, &motg->inputs);
+	}
+#endif
 
+#ifdef OTG_WAIT_PMIC
 	/* do not queue state m/c work if id is grounded */
 	if (!test_bit(ID, &motg->inputs)) {
 		/*
@@ -4322,6 +4257,8 @@ static void msm_otg_set_vbus_state(int online)
 	}
 
 out:
+#endif
+
 	if (test_bit(MHL, &motg->inputs) ||
 			mhl_det_in_progress) {
 		pr_debug("PMIC: BSV interrupt ignored in MHL\n");
@@ -4390,6 +4327,7 @@ static void msm_id_status_w(struct work_struct *w)
 
 }
 
+#ifdef OTG_WAIT_PMIC
 #define MSM_ID_STATUS_DELAY	5 /* 5msec */
 static irqreturn_t msm_id_irq(int irq, void *data)
 {
@@ -4408,6 +4346,7 @@ static irqreturn_t msm_id_irq(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+#endif
 
 int msm_otg_pm_notify(struct notifier_block *notify_block,
 					unsigned long mode, void *unused)
@@ -5452,13 +5391,6 @@ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
 	if (pdata->usb_id_gpio < 0)
 		pr_debug("usb_id_gpio is not available\n");
 
-#ifdef CONFIG_MACH_JALEBI
-	pdata->otg5v_en_gpio = of_get_named_gpio(node, "qcom,otg5v_en-gpio", 0);
-	if (pdata->otg5v_en_gpio < 0)
-		pr_debug("otg5v_en_gpio is not available\n");
-	dev_info(&pdev->dev, "get otg5v_en_gpio = %d\n", pdata->otg5v_en_gpio);
-#endif
-
 	if (pdata->mode == USB_OTG)
 		/*Booster Work*/
 		pdata->vbus_power = dummy_vbus_power;
@@ -5493,7 +5425,9 @@ static int msm_otg_probe(struct platform_device *pdev)
 	struct usb_phy *phy;
 	struct msm_otg_platform_data *pdata;
 	void __iomem *tcsr;
+#ifdef OTG_WAIT_PMIC
 	int id_irq = 0;
+#endif
 
 	dev_info(&pdev->dev, "msm_otg probe\n");
 
@@ -5971,6 +5905,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 		goto free_async_irq;
 	}
 
+#ifdef OTG_WAIT_PMIC
 	if (motg->pdata->mode == USB_OTG &&
 		motg->pdata->otg_control == OTG_PMIC_CONTROL &&
 		!motg->phy_irq) {
@@ -6043,32 +5978,12 @@ static int msm_otg_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "ID IRQ doesn't exist\n");
 			goto remove_phy;
 		}
-
-#ifdef CONFIG_MACH_JALEBI
-		if (gpio_is_valid(motg->pdata->otg5v_en_gpio)) {
-			/* otg5v_en_gpio request */
-			ret = gpio_request(motg->pdata->otg5v_en_gpio, "OTG5V_EN_GPIO");
-			if (ret < 0) {
-				dev_err(&pdev->dev, "otg5v_en_gpio request failed for id\n");
-				motg->pdata->otg5v_en_gpio = 0;
-				goto remove_phy;
-			} else {
-				dev_info(&pdev->dev, "otg5v_en_gpio request success for id\n");
-			}
-		}
-#endif
 	}
+#endif
 
 	msm_hsusb_mhl_switch_enable(motg, 1);
 
 	platform_set_drvdata(pdev, motg);
-
-#ifdef CONFIG_MACH_JALEBI
-	ret = otg_pinctrl_init(pdev);
-	if (ret)
-		pr_warn("%s: failed to get pin resources\n", __func__);
-#endif
-
 	device_init_wakeup(&pdev->dev, 1);
 	motg->mA_port = IUNIT;
 
@@ -6136,8 +6051,10 @@ static int msm_otg_probe(struct platform_device *pdev)
 			psy = &motg->usb_psy;
 	}
 
+#ifdef OTG_WAIT_PMIC
 	if (legacy_power_supply && pdata->otg_control == OTG_PMIC_CONTROL)
 		pm8921_charger_register_vbus_sn(&msm_otg_set_vbus_state);
+#endif
 
 	ret = msm_otg_setup_ext_chg_cdev(motg);
 	if (ret)
@@ -6167,7 +6084,9 @@ remove_cdev:
 	}
 	if (psy)
 		power_supply_unregister(psy);
+#ifdef OTG_WAIT_PMIC
 remove_phy:
+#endif
 	usb_remove_phy(&motg->phy);
 free_async_irq:
 	if (motg->async_irq)

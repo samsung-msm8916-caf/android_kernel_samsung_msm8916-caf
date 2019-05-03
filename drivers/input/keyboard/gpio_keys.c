@@ -38,6 +38,8 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/syscore_ops.h>
 
+extern struct class *sec_class;
+
 struct device *sec_key;
 EXPORT_SYMBOL(sec_key);
 
