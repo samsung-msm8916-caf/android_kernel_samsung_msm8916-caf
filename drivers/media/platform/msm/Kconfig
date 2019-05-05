@@ -34,7 +34,15 @@ config MSMB_CAMERA_DEBUG
 	  Enable printk() debug for msm camera 2.0
 
 if MSMB_CAMERA
+if SEC_SERRANOVE_PROJECT
+source "drivers/media/platform/msm/camera_v2_serranovexx/Kconfig"
+endif # SEC_SERRANOVE_PROJECT
+if SEC_A3_EUR_PROJECT
+source "drivers/media/platform/msm/camera_v2_a3/Kconfig"
+endif # SEC_A3_EUR_PROJECT
+if !(SEC_A3_EUR_PROJECT || SEC_SERRANOVE_PROJECT)
 source "drivers/media/platform/msm/camera_v2/Kconfig"
+endif
 endif # MSMB_CAMERA
 
 source "drivers/media/platform/msm/vidc/Kconfig"
