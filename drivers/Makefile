@@ -168,5 +168,6 @@ obj-$(CONFIG_ESOC)		+= esoc/
 obj-$(CONFIG_BIF)		+= bif/
 obj-$(CONFIG_BATTERY_SAMSUNG)   += battery/
 obj-$(CONFIG_SENSORS)		+= sensors/
+obj-$(CONFIG_SENSORS_CORE)		+= sensors/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 obj-y				+= motor/
