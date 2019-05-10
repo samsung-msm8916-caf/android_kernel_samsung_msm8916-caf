@@ -238,6 +238,7 @@ static void __iomem *virt_bases[N_BASES];
 #define gpll0_source_val		1
 #define gpll0_aux_source_val		3
 #define gpll1_source_val		1
+#define gpll1_aux_source_val    2
 #define gpll2_source_val		2
 #define dsi0_phypll_mm_source_val	1
 
@@ -451,6 +452,7 @@ static struct pll_vote_clk gpll1_clk_src = {
 	},
 };
 
+DEFINE_EXT_CLK(gpll1_aux_clk_src, &gpll1_clk_src.c);
 static struct pll_vote_clk gpll2_clk_src = {
 	.en_reg = (void __iomem *)APCS_GPLL_ENA_VOTE,
 	.en_mask = BIT(2),
@@ -926,6 +928,7 @@ static struct rcg_clk jpeg0_clk_src = {
 static struct clk_freq_tbl ftbl_gcc_camss_mclk0_1_clk[] = {
 	F(   9600000,	      xo,   2,	  0,	0),
 	F(  23880000,      gpll0,   1,    2,   67),
+	F(  26022000,      gpll1_aux,   1,  1, 34),
 	F(  66670000,	   gpll0,  12,	  0,	0),
 	F_END
 };
