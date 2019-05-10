@@ -67,7 +67,6 @@
 
 		qcom,mdss-dsi-off-command = [05 01 00 00 00 00 02 28 00
 				 05 01 00 00 78 00 02 10 00];
-		qcom,cont-splash-enabled;
 		qcom,mdss-dsi-h-pulse-width = <4>;
 		qcom,mdss-dsi-h-back-porch = <18>;
 		qcom,mdss-dsi-h-front-porch = <94>;
@@ -89,9 +88,9 @@
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		qcom,mdss-dsi-bllp-power-mode;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
-		  qcom,mdss-dsi-pixel-packing = "loose";
+		qcom,mdss-dsi-pixel-packing = "tight";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
-		  qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
 		qcom,mdss-dsi-lane-0-state;
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-map = "lane_map_0123";
@@ -101,13 +100,14 @@
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-panel-framerate = <60>;
+        qcom,mdss-dsi-panel-clockrate = <800000000>;
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
-		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 		qcom,mdss-pan-physical-width-dimension = <55>;
 		qcom,mdss-pan-physical-height-dimension = <95>;
 		qcom,mdss-dsi-reset-sequence = <1 5>, <0 1>, <1 10>;
 		qcom,mdss-dsi-lp11-init;
-		qcom,mdss-dsi-init-delay-us = <2000>;
+		qcom,mdss-dsi-init-delay-us = <20000>;
 		qcom,mdss-dsi-rx-eot-ignore;
 		qcom,mdss-dsi-tx-eot-append;
 		qcom,mdss-dsi-force-clk-lane-hs;
