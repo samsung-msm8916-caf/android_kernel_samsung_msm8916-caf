@@ -53,12 +53,15 @@
 #include "bstclass.h"
 
 #define ACC_NAME  "ACC"
+#define BMA2X2_ENABLE_INT1
 
 #ifdef ENABLE_ISR_DEBUG_MSG
 #define ISR_INFO(dev, fmt, arg...) dev_info(dev, fmt, ##arg)
 #else
 #define ISR_INFO(dev, fmt, arg...)
 #endif
+
+#define BMA2X2_SENSOR_IDENTIFICATION_ENABLE
 
 #define SENSOR_NAME                 "bma2x2-accel"
 #define ABSMIN                      -512
