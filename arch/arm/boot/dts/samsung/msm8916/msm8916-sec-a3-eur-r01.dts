@@ -16,7 +16,7 @@
 #include "msm8916-memory.dtsi"
 
 / {
-	model = "Samsung A3 EUR PROJECT Rev00";
+	model = "Samsung A3 EUR PROJECT Rev01";
 	compatible = "qcom,msm8916-mtp", "qcom,msm8916", "qcom,mtp";
 	/*QCOM BOARD REV TYPE...*/
 	/*qcom,board-id = <8 0>;*/
