@@ -1083,6 +1083,7 @@ static struct rcg_clk byte0_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_gcc_mdss_esc0_clk[] = {
+	F(  12800000,	      xo,   1.5,	  0,	0),
 	F(  19200000,	      xo,   1,	  0,	0),
 	F_END
 };
