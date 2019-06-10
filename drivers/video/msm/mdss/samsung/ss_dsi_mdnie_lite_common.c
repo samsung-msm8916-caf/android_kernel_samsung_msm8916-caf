@@ -269,11 +269,9 @@ static ssize_t mode_show(struct device *dev,
 	int buffer_pos = 0;
 	struct mdnie_lite_tun_type *mdnie_tune_state = NULL;
 
-	buffer_pos += snprintf(buf, 256, "Current Mode : ");
 	list_for_each_entry_reverse(mdnie_tune_state, &mdnie_list , used_list) {
-		buffer_pos += snprintf(buf + buffer_pos, 256, "DSI%d : %s ", mdnie_tune_state->index, mdnie_mode_name[mdnie_tune_state->mdnie_mode]);
+		buffer_pos += snprintf(buf + buffer_pos, 256, "%d\n", mdnie_tune_state->mdnie_mode);
 	}
-	buffer_pos += snprintf(buf + buffer_pos, 256, "\n");
 
 	DPRINT("%s \n", buf);
 
@@ -318,11 +316,9 @@ static ssize_t scenario_show(struct device *dev,
 	int buffer_pos = 0;
 	struct mdnie_lite_tun_type *mdnie_tune_state = NULL;
 
-	buffer_pos += snprintf(buf, 256, "Current APP : ");
 	list_for_each_entry_reverse(mdnie_tune_state, &mdnie_list , used_list) {
-		buffer_pos += snprintf(buf + buffer_pos, 256, "DSI%d : %s ", mdnie_tune_state->index, mdnie_app_name[mdnie_tune_state->mdnie_app]);
+		buffer_pos += snprintf(buf + buffer_pos, 256, "%d\n", mdnie_tune_state->mdnie_app);
 	}
-	buffer_pos += snprintf(buf + buffer_pos, 256, "\n");
 
 	DPRINT("%s \n", buf);
 
@@ -390,11 +386,9 @@ static ssize_t outdoor_show(struct device *dev,
 	int buffer_pos = 0;
 	struct mdnie_lite_tun_type *mdnie_tune_state = NULL;
 
-	buffer_pos += snprintf(buf, 256, "Current outdoor Mode : ");
 	list_for_each_entry_reverse(mdnie_tune_state, &mdnie_list , used_list) {
-		buffer_pos += snprintf(buf + buffer_pos, 256, "DSI%d : %s ", mdnie_tune_state->index, outdoor_name[mdnie_tune_state->outdoor]);
+		buffer_pos += snprintf(buf + buffer_pos, 256, "%d\n", mdnie_tune_state->outdoor);
 	}
-	buffer_pos += snprintf(buf + buffer_pos, 256, "\n");
 
 	DPRINT("%s \n", buf);
 
@@ -480,17 +474,9 @@ static ssize_t accessibility_show(struct device *dev,
 	int buffer_pos = 0;
 	struct mdnie_lite_tun_type *mdnie_tune_state = NULL;
 
-	buffer_pos += snprintf(buf, 256, "Current accessibility : ");
 	list_for_each_entry_reverse(mdnie_tune_state, &mdnie_list , used_list) {
-		buffer_pos += snprintf(buf + buffer_pos, 256, "DSI%d : %s ", mdnie_tune_state->index,
-		mdnie_tune_state->mdnie_accessibility ?
-		mdnie_tune_state->mdnie_accessibility == 1 ? "NEGATIVE" :
-		mdnie_tune_state->mdnie_accessibility == 2 ? "COLOR_BLIND" :
-		mdnie_tune_state->mdnie_accessibility == 3 ? "CURTAIN" :
-		mdnie_tune_state->mdnie_accessibility == 4 ? "GRAYSCALE" : "GRAYSCALE_NEGATIVE" :
-		"ACCESSIBILITY_OFF");
+		buffer_pos += snprintf(buf + buffer_pos, 256, "%d\n", mdnie_tune_state->mdnie_accessibility);
 	}
-	buffer_pos += snprintf(buf + buffer_pos, 256, "\n");
 
 	DPRINT("%s \n", buf);
 
