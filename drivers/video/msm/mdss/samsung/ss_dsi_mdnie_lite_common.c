@@ -309,6 +309,12 @@ static ssize_t mode_store(struct device *dev,
 	return size;
 }
 
+static ssize_t mode_max_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, 256, "%d\n", MAX_MODE);
+}
+
 static ssize_t scenario_show(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -323,6 +329,12 @@ static ssize_t scenario_show(struct device *dev,
 	DPRINT("%s \n", buf);
 
 	return buffer_pos;
+}
+
+static ssize_t scenario_max_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, 256, "%d\n", MAX_APP_MODE);
 }
 
 /* app_id : App give self_app_id to mdnie driver.
@@ -393,6 +405,12 @@ static ssize_t outdoor_show(struct device *dev,
 	DPRINT("%s \n", buf);
 
 	return buffer_pos;
+}
+
+static ssize_t outdoor_max_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, 256, "%d\n", MAX_OUTDOOR_MODE);
 }
 
 static ssize_t outdoor_store(struct device *dev,
@@ -481,6 +499,12 @@ static ssize_t accessibility_show(struct device *dev,
 	DPRINT("%s \n", buf);
 
 	return buffer_pos;
+}
+
+static ssize_t accessibility_max_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, 256, "%d\n", ACCESSIBILITY_MAX);
 }
 
 static ssize_t accessibility_store(struct device *dev,
@@ -721,6 +745,11 @@ static ssize_t hmt_color_temperature_store(struct device *dev,
 	return size;
 }
 
+static DEVICE_ATTR(mode_max, 0664, mode_max_show, NULL);
+static DEVICE_ATTR(scenario_max, 0664, scenario_max_show, NULL);
+static DEVICE_ATTR(outdoor_max, 0664, outdoor_max_show, NULL);
+static DEVICE_ATTR(accessibility_max, 0664, accessibility_max_show, NULL);
+
 static DEVICE_ATTR(mode, 0664, mode_show, mode_store);
 static DEVICE_ATTR(scenario, 0664, scenario_show, scenario_store);
 static DEVICE_ATTR(outdoor, 0664, outdoor_show, outdoor_store);
@@ -746,14 +775,20 @@ void create_tcon_mdnie_node(void)
 	/* APP */
 	if (device_create_file(tune_mdnie_dev, &dev_attr_scenario) < 0)
 		DPRINT("Failed to create device file(%s)!\n", dev_attr_scenario.attr.name);
+	if (device_create_file(tune_mdnie_dev, &dev_attr_scenario_max) < 0)
+		DPRINT("Failed to create device file(%s)!\n", dev_attr_scenario_max.attr.name);
 
 	/* MODE */
 	if (device_create_file(tune_mdnie_dev, &dev_attr_mode) < 0)
 		DPRINT("Failed to create device file(%s)!\n", dev_attr_mode.attr.name);
+	if (device_create_file(tune_mdnie_dev, &dev_attr_mode_max) < 0)
+		DPRINT("Failed to create device file(%s)!\n", dev_attr_mode_max.attr.name);
 
 	/* OUTDOOR */
 	if (device_create_file(tune_mdnie_dev, &dev_attr_outdoor) < 0)
 		DPRINT("Failed to create device file(%s)!\n", dev_attr_outdoor.attr.name);
+	if (device_create_file(tune_mdnie_dev, &dev_attr_outdoor_max) < 0)
+		DPRINT("Failed to create device file(%s)!\n", dev_attr_outdoor_max.attr.name);
 
 	/* MDNIE ON/OFF */
 	if (device_create_file(tune_mdnie_dev, &dev_attr_bypass) < 0)
@@ -768,6 +803,8 @@ void create_tcon_mdnie_node(void)
 	/* COLOR BLIND */
 	if (device_create_file(tune_mdnie_dev, &dev_attr_accessibility) < 0)
 		DPRINT("Failed to create device file(%s)!=n", dev_attr_accessibility.attr.name);
+	if (device_create_file(tune_mdnie_dev, &dev_attr_accessibility_max) < 0)
+		DPRINT("Failed to create device file(%s)!=n", dev_attr_accessibility_max.attr.name);
 
 	if (device_create_file
 		(tune_mdnie_dev, &dev_attr_sensorRGB) < 0)
