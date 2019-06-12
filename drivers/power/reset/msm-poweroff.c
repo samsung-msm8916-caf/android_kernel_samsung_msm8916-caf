@@ -292,6 +292,10 @@ static void msm_restart_prepare(const char *cmd)
 			__raw_writel(0x77665501, restart_reason);
 		}
 	}
+	else {
+		printk(KERN_NOTICE "%s: clear reset flag\n", __func__);
+		__raw_writel(0x12345678, restart_reason);
+	}
 
 	flush_cache_all();
 
