@@ -350,4 +350,9 @@ config SND_SOC_MSMZIRC
 	 interfaces with DSP, also it will enable
 	 the machine drivers and the corresponding
 	 DAI-links.
+
+config AUDIO_SPEAKER_OUT_NXP_AMP_ENABLE
+	tristate "samsung audio speaker NXP amp feature"
+	help
+	 To add support for speaker NXP amp
 endmenu
