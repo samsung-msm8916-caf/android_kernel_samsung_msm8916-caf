@@ -37,7 +37,7 @@
 #define LEVEL_DEFAULT       50
 #define LEVEL_THRESHOLD     75
 
-static unsigned long pwm_val = 100;
+static unsigned long pwm_val = LEVEL_DEFAULT;
 
 /* default timeout */
 #define VIB_DEFAULT_TIMEOUT 10000
