@@ -855,7 +855,7 @@ struct mdnie_lite_tun_type* init_dsi_tcon_mdnie_class(int index, struct samsung_
 		mdnie_tune_state->hbm_enable = false;
 
 		mdnie_tune_state->mdnie_app = UI_APP;
-		mdnie_tune_state->mdnie_mode = STANDARD_MODE;
+		mdnie_tune_state->mdnie_mode = AUTO_MODE;
 		mdnie_tune_state->outdoor = OUTDOOR_OFF_MODE;
 
 		mdnie_tune_state->mdnie_accessibility = ACCESSIBILITY_OFF;
